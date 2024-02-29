@@ -1,6 +1,6 @@
 SELECT
     SECTION.section_id,
-    CONCAT(COURSE.code, SECTION.code) AS course_section_code,
+    CONCAT(COURSE.code, ' ', SECTION.code) AS course_section_code,
     SECTION.section_title,
     SECTION_SCHEDULE.start_date,
     SECTION_SCHEDULE.end_date,
@@ -17,9 +17,6 @@ SELECT
     COSTING_UNIT.name AS costing_unit_name,
     coursesection_lw.coursesection_lw_id,
     coursesection_lw.transaction_basket_id,
-    PERSON.person_id,
-    PERSON.first_name1,
-    PERSON.last_name,
     PERSON_ADDRESS.country,
     PERSON_ADDRESS.city,
     PERSON_ADDRESS.province_state,
