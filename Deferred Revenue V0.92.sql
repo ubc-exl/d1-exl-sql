@@ -2,14 +2,20 @@
  * Deferred Revenue Reprot / GL Details: 
  *  0.91 revision: included debit_amount column as well as credit_amount in the deferred rev calculation 
  *  0.91.1 revision: modified to replace calls to getdate() with a variable @effectiveDate, 
- *     makes it easier to run the report for a specific date by editing line 9 
+ *     makes it easier to run the report for a specific date by editing line 10 
+ *  0.92 revision: uses the "section_denorm" table that has one row per section and has 
+ *     start and end date for the entire date-range across all schedules. Unlike 0.91, this works for 
+ *     multiple schedule blocks in a course section. 
  */
-DECLARE @effectiveDate datetime
+ 
+DECLARE @effectiveDate datetime  
 SET
-       @effectiveDate = getdate()
-       /* Example to run as of a date: 
-        *  @effectiveDate = '20240331 11:59:00' 
-        */
+       @effectiveDate = getdate()     
+
+         /* Example to run as of a date: 
+         *  @effectiveDate = '20240331 11:59:00' 
+         */
+    
 SELECT
        allData.po_name,
        allData.cu_name,
@@ -21,32 +27,17 @@ SELECT
        allData.credit_amount,
        allData.start_date,
        allData.end_date,
-       CAST(
-              ROUND (
-                     (
-                            CASE
-                                   WHEN allData.debit_amount > 0 THEN -1.0 * allData.debit_amount
-                                   ELSE allData.credit_amount
-                            END * (
-                                   1.0 + DATEDIFF(
-                                          DAY,
-                                          CASE
-                                                 WHEN @effectiveDate < allData.start_date THEN allData.start_date
-                                                 ELSE @effectiveDate
-                                          END,
-                                          allData.end_date
-                                   )
-                            ) / (
-                                   1.0 + DATEDIFF(
-                                          DAY,
-                                          allData.start_date,
-                                          allData.end_date
-                                   )
-                            )
-                     ),
-                     2
-              ) AS DECIMAL(8, 2)
-       ) AS deferred_rev,
+        CAST( ROUND ( 
+           (CASE WHEN allData.debit_amount>0 THEN -1.0 * allData.debit_amount ELSE allData.credit_amount END * (1.0 + DATEDIFF(
+                DAY,
+                CASE WHEN @effectiveDate<allData.start_date THEN allData.start_date ELSE @effectiveDate END,
+                allData.end_date
+            )) / (1.0 + DATEDIFF(
+                DAY,
+                allData.start_date,
+                allData.end_date
+            )))
+        , 2)  AS DECIMAL(8, 2) ) AS deferred_rev,
        allData.rpt_type,
        allData.journal_entry_id,
        allData.code,
@@ -65,6 +56,8 @@ SELECT
        allData.school_personnel_number,
        allData.payment_info_number,
        allData.custom_section_number
+       
+
 FROM
        (
               SELECT
@@ -130,7 +123,7 @@ FROM
                                    a.dispersement_lw_id,
                                    a.payment_info_number,
                                    a.custom_section_number,
-                                   a.start_date,
+                                   a.start_date, 
                                    a.end_date
                             FROM
                                    (
@@ -176,9 +169,9 @@ FROM
                                                                sec.semester_id,
                                                                c.code AS course_code,
                                                                sec.code AS section_code,
-                                                               sec.custom_section_number AS custom_section_number,
-                                                               secsked.start_date AS start_date,
-                                                               secsked.end_date AS end_date
+                                                               sec.custom_section_number AS custom_section_number,                                                        
+                                                               secden.start_date AS start_date,
+                                                               secden.end_date AS end_date
                                                         FROM
                                                                journal_entry je
                                                                INNER JOIN transaction_payment tp ON je.transaction_id = tp.transaction_id
@@ -186,8 +179,9 @@ FROM
                                                                INNER JOIN fee_lw flw ON flw.fee_lw_id = tpa.fee_lw_id
                                                                INNER JOIN coursesection_lw cslw ON cslw.coursesection_lw_id = flw.containing_cslw_id
                                                                LEFT JOIN section sec ON cslw.course_section_id = sec.section_id
-                                                               LEFT JOIN course c ON sec.course_id = c.course_id -- edits here to get section_schedule
-                                                               INNER JOIN section_schedule secsked ON sec.section_id = secsked.section_id
+                                                               LEFT JOIN course c ON sec.course_id = c.course_id
+                                                               -- edits here to get section_schedule
+                                                               LEFT OUTER JOIN section_denorm secden ON sec.section_id = secden.section_id
                                                         WHERE
                                                                je.transaction_id IS NOT NULL
                                                                AND tpa.allocated_to_transaction_id IS NULL
@@ -252,8 +246,8 @@ FROM
                                                                c.code AS course_code,
                                                                sec.code AS section_code,
                                                                sec.custom_section_number AS custom_section_number,
-                                                               secsked.start_date AS start_date,
-                                                               secsked.end_date AS end_date
+                                                               secden.start_date AS start_date,
+                                                               secden.end_date AS end_date
                                                         FROM
                                                                journal_entry je
                                                                INNER JOIN transaction_payment tp ON je.transaction_id = tp.transaction_id
@@ -267,8 +261,9 @@ FROM
                                                                )
                                                                LEFT JOIN coursesection_lw cslw ON cslw.coursesection_lw_id = flw.containing_cslw_id
                                                                LEFT JOIN section sec ON cslw.course_section_id = sec.section_id
-                                                               LEFT JOIN course c ON sec.course_id = c.course_id -- edits here to get section_schedule
-                                                               INNER JOIN section_schedule secsked ON sec.section_id = secsked.section_id
+                                                               LEFT JOIN course c ON sec.course_id = c.course_id
+                                                               -- edits here to get section_schedule
+                                                               LEFT OUTER JOIN section_denorm secden ON sec.section_id = secden.section_id
                                                         WHERE
                                                                je.transaction_id IS NOT NULL
                                                                AND tpa.allocated_to_transaction_id IS NOT NULL
@@ -309,16 +304,17 @@ FROM
                                                                c.code AS course_code,
                                                                sec.code AS section_code,
                                                                sec.custom_section_number AS custom_section_number,
-                                                               secsked.start_date AS start_date,
-                                                               secsked.end_date AS end_date
+                                                               secden.start_date AS start_date,
+                                                               secden.end_date AS end_date
                                                         FROM
                                                                journal_entry je
                                                                INNER JOIN fee_lw_dispersement_lw fd ON fd.dispersement_lw_id = je.dispersement_lw_id
                                                                INNER JOIN fee_lw flw ON flw.fee_lw_id = fd.fee_lw_id
                                                                INNER JOIN coursesection_lw cslw ON cslw.coursesection_lw_id = flw.containing_cslw_id
                                                                LEFT JOIN section sec ON cslw.course_section_id = sec.section_id
-                                                               LEFT JOIN course c ON sec.course_id = c.course_id -- edits here to get section_schedule
-                                                               INNER JOIN section_schedule secsked ON sec.section_id = secsked.section_id
+                                                               LEFT JOIN course c ON sec.course_id = c.course_id
+                                                               -- edits here to get section_schedule
+                                                               LEFT OUTER JOIN section_denorm secden ON sec.section_id = secden.section_id
                                                         WHERE
                                                                je.transaction_id IS NULL
                                                                AND je.dispersement_lw_id IS NOT NULL
@@ -499,7 +495,7 @@ FROM
                                                                       ELSE spi.parent_code
                                                                END AS course_code,
                                                                spi.code AS section_code,
-                                                               NULL AS start_date,
+                                                               NULL AS start_date,  
                                                                NULL AS end_date
                                                         FROM
                                                                journal_entry je
@@ -554,8 +550,8 @@ FROM
                                                                c.code AS course_code,
                                                                sec.code AS section_code,
                                                                sec.custom_section_number AS custom_section_number,
-                                                               secsked.start_date AS start_date,
-                                                               secsked.end_date AS end_date
+                                                               secden.start_date AS start_date,
+                                                               secden.end_date AS end_date                                                               
                                                         FROM
                                                                journal_entry je
                                                                INNER JOIN transaction_payment tp ON je.transaction_id = tp.transaction_id
@@ -566,8 +562,9 @@ FROM
                                                                INNER JOIN fee_lw flw_tp ON flw_tp.fee_lw_id = flcfl.fee_lw_id
                                                                INNER JOIN coursesection_lw cslw ON cslw.coursesection_lw_id = flw_tp.actual_cslw_id
                                                                LEFT JOIN section sec ON cslw.course_section_id = sec.section_id
-                                                               LEFT JOIN course c ON sec.course_id = c.course_id -- edits here to get section_schedule
-                                                               INNER JOIN section_schedule secsked ON sec.section_id = secsked.section_id
+                                                               LEFT JOIN course c ON sec.course_id = c.course_id
+                                                               -- edits here to get section_schedule
+                                                               LEFT OUTER JOIN section_denorm secden ON sec.section_id = secden.section_id
                                                         WHERE
                                                                je.transaction_id IS NOT NULL
                                                                AND tpa.allocated_to_transaction_id IS NULL
@@ -606,8 +603,8 @@ FROM
                                                                c.code AS course_code,
                                                                sec.code AS section_code,
                                                                sec.custom_section_number AS custom_section_number,
-                                                               secsked.start_date AS start_date,
-                                                               secsked.end_date AS end_date
+                                                               secden.start_date AS start_date,
+                                                               secden.end_date AS end_date
                                                         FROM
                                                                journal_entry je
                                                                INNER JOIN fee_lw_dispersement_lw fd ON fd.dispersement_lw_id = je.allocate_dispersement_lw_id
@@ -617,7 +614,7 @@ FROM
                                                                INNER JOIN coursesection_lw cslw ON cslw.coursesection_lw_id = flw_tp.actual_cslw_id
                                                                LEFT JOIN section sec ON cslw.course_section_id = sec.section_id
                                                                LEFT JOIN course c ON sec.course_id = c.course_id -- edits here to get section_schedule
-                                                               INNER JOIN section_schedule secsked ON sec.section_id = secsked.section_id
+                                                               LEFT OUTER JOIN section_denorm secden ON sec.section_id = secden.section_id
                                                         WHERE
                                                                je.transaction_id IS NULL
                                                                AND je.dispersement_lw_id IS NOT NULL
@@ -627,7 +624,8 @@ FROM
                                                                AND c.course_id > 0 --end of  virtual section 
                                                  ) a
                                           WHERE
-                                                 1 = 1 --AND a.entry_time >= @transactionStartDate
+                                                 1 = 1
+                                                 --AND a.entry_time >= @transactionStartDate
                                                  --AND a.entry_time < @transactionEndDate
                                                  AND @effectiveDate < a.end_date
                                    ) a
@@ -636,7 +634,7 @@ FROM
                                    LEFT JOIN program_office po ON po.program_office_id = a.program_office_id
                                    LEFT JOIN costing_unit cu ON cu.costing_unit_id = a.costing_unit_id -- end of section 1: section fee. 
                                    -- section 2: other fee 
-                            UNION
+                                   UNION
                             ALL
                             SELECT
                                    DISTINCT je.journal_entry_id,
@@ -682,7 +680,7 @@ FROM
                                           ELSE NULL
                                    END AS payment_info_number,
                                    '' AS custom_section_number,
-                                   NULL AS start_date,
+                                   NULL AS start_date,  
                                    NULL AS end_date
                             FROM
                                    journal_entry je
@@ -736,7 +734,7 @@ FROM
                                    je.dispersement_lw_id,
                                    NULL AS payment_info_number,
                                    '' AS custom_section_number,
-                                   NULL AS start_date,
+                                   NULL AS start_date,  
                                    NULL AS end_date
                             FROM
                                    journal_entry je
@@ -815,7 +813,7 @@ FROM
                                           ELSE NULL
                                    END AS payment_info_number,
                                    '' AS custom_section_number,
-                                   NULL AS start_date,
+                                   NULL AS start_date,  
                                    NULL AS end_date
                             FROM
                                    journal_entry je
@@ -843,7 +841,8 @@ FROM
                                           OR flw.fee_lw_id IS NULL
                                    )
                                    AND je.b_allocated = '0' -- end of section 2: other fee. 
-                                   -- insert original code lines 580 to 781 here, with appropriate modifications for colums and joins  
+                         -- insert original code lines 580 to 781 here, with appropriate modifications for colums and joins  
+                            
                      ) a
                      INNER JOIN transaction_basket tb ON a.transaction_basket_id = tb.transaction_basket_id
                      LEFT JOIN (
@@ -884,7 +883,8 @@ FROM
                             OR tb.transaction_basket_status = 'Void'
                      )
                      AND ga.account_type_code = 'revenue'
-                     AND @effectiveDate < a.end_date -- section 3: gl adjustment 
+                     AND @effectiveDate < a.end_date
+                      -- section 3: gl adjustment 
               UNION
               ALL
               SELECT
@@ -917,7 +917,7 @@ FROM
                      a.dispersement_lw_id,
                      NULL AS payment_info_number,
                      '' AS custom_section_number,
-                     NULL AS start_date,
+                     NULL AS start_date,  
                      NULL AS end_date,
                      NULL AS deferred_rev
               FROM

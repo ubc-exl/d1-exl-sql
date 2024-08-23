@@ -1,23 +1,21 @@
 SELECT
+    TRANSACTION_BASKET.creation_time AS registration_date,
+    PERSON.login_id,
+    PERSON.first_name1,
+    PERSON.last_name,
+    STUDENT.student_number,
     SECTION.section_id,
     CONCAT(COURSE.code, ' ', SECTION.code) AS course_section_code,
     SECTION.section_title,
     SECTION_SCHEDULE.start_date,
     SECTION_SCHEDULE.end_date,
     '' AS status,
-    SECTION.max_enrollment_size,
-    TRANSACTION_BASKET.creation_time AS registration_date,
-    TBEI.registration_source as registration_source,
     fee_lw_real.amount,
     academic_year.name AS academic_year_name,
     SEMESTER.name AS term_name,
     PROGRAM_OFFICE.program_office_id,
     PROGRAM_OFFICE.code AS program_office_code,
     PROGRAM_OFFICE.name AS program_office_name,
-    PA.code as program_area_code,
-    PA.name as program_area_name,
-    PS.code as program_stream_code,
-    PS.name as program_stream_name,
     COSTING_UNIT.code AS costing_unit_code,
     COSTING_UNIT.name AS costing_unit_name,
     coursesection_lw.coursesection_lw_id,
@@ -25,14 +23,13 @@ SELECT
     PERSON_ADDRESS.country,
     PERSON_ADDRESS.city,
     PERSON_ADDRESS.province_state,
-    STUDENT.student_number,
     TRANSACTION_BASKET.basket_number,
     fee_lw.coursesection_lw_id,
     fee_lw.amount,
     fee_lw.actual_cslw_id
     
 FROM
-    (((
+    (
         (
             (
                 (
@@ -88,12 +85,6 @@ FROM
         LEFT OUTER JOIN instructor_contract INSTRUCTOR_CONTRACT ON SECTION.section_id = INSTRUCTOR_CONTRACT.course_section_id
     )
     LEFT OUTER JOIN person_address PERSON_ADDRESS ON PERSON.person_id = PERSON_ADDRESS.person_id
-    )LEFT OUTER JOIN course_program_area CPA on course.course_id = CPA.course_id 
-    )LEFT OUTER JOIN program_area PA on CPA.program_area_id = PA.program_area_id 
-    LEFT OUTER JOIN course_program_stream CPS on course.course_id = CPS.course_id 
-    LEFT OUTER JOIN program_stream PS on CPs.program_stream_id = PS.program_stream_id 
-    LEFT OUTER JOIN transaction_basket_extra_info TBEI on TRANSACTION_BASKET.transaction_basket_id = TBEI.transaction_basket_id
-    
 WHERE
     (
         TRANSACTION_BASKET.transaction_basket_status = N'Processed'
@@ -117,12 +108,10 @@ WHERE
         )
     )
     AND (
-        coursesection_lw.creation_time >= convert(datetime, '20230228 00:00:00.000')
-    )
-    AND (
-        coursesection_lw.creation_time < convert(datetime, '20240228 00:00:00.000')
+        TRANSACTION_BASKET.creation_time >= convert(datetime, '20230228 00:00:00.000')
     )
 ORDER BY
+    TRANSACTION_BASKET.creation_time DESC,
     PROGRAM_OFFICE.name,
     PROGRAM_OFFICE.program_office_id,
     COSTING_UNIT.name,
